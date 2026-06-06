@@ -1,0 +1,7 @@
+aiogram==3.13.1
+SQLAlchemy==2.0.31
+aiosqlite==0.20.0
+pydantic-settings==2.3.4
+fluentogram==1.2.1
+aiocryptopay==0.4.8
+pybit==5.16.0
