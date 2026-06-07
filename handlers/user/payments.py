@@ -10,12 +10,14 @@ import time  # Не забудь добавить импорт в начало �
 from config_data.config import config
 from states.user_states import TopupStates, BybitTopupStates
 from database.requests import (
-    add_user_balance, get_admins_for_notifications, 
+    add_user_balance, credit_cryptobot_invoice, get_admins_for_notifications, 
     is_bybit_tx_processed, register_bybit_tx
 )
 from keyboards.user_kb import (
-    get_invoice_kb, get_cancel_topup_kb, get_topup_methods_kb, get_bybit_check_kb
+    get_invoice_kb, get_cancel_topup_kb, get_topup_methods_kb, get_bybit_check_kb,
+    get_main_menu_only_kb
 )
+from middlewares.i18n import create_translator_hub
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -26,6 +28,7 @@ bybit_session = HTTP(
     api_secret=config.bybit_api_secret,
     testnet=False
 )
+translator_hub = create_translator_hub()
 
 @router.callback_query(F.data == "choose_topup_method")
 async def show_topup_methods(callback: CallbackQuery, i18n):
@@ -41,6 +44,7 @@ async def start_topup(callback: CallbackQuery, state: FSMContext, i18n):
         text=i18n.topup_cryptobot_info(), 
         reply_markup=get_cancel_topup_kb(i18n)
     )
+    await state.update_data(topup_chat_id=callback.message.chat.id, topup_message_id=callback.message.message_id)
     await state.set_state(TopupStates.waiting_for_amount)
 
 @router.message(TopupStates.waiting_for_amount, F.text)
@@ -53,13 +57,25 @@ async def process_topup_amount(message: Message, state: FSMContext, i18n):
         return await message.answer(i18n.topup_invalid_amount(), reply_markup=get_cancel_topup_kb(i18n))
 
     await message.delete()
+    data = await state.get_data()
     await state.clear()
-    
+
     invoice = await crypto.create_invoice(asset='USDT', amount=amount, description=f"Topup {message.from_user.id}")
-    await message.answer(
-        text=i18n.topup_invoice_created(invoice_id=str(invoice.invoice_id), amount=amount), 
-        reply_markup=get_invoice_kb(invoice.bot_invoice_url, invoice.invoice_id, i18n)
-    )
+    invoice_text = i18n.topup_invoice_created(invoice_id=str(invoice.invoice_id), amount=amount)
+    invoice_kb = get_invoice_kb(invoice.bot_invoice_url, invoice.invoice_id, i18n)
+
+    try:
+        if not data.get("topup_chat_id") or not data.get("topup_message_id"):
+            raise ValueError("Topup message id is missing")
+
+        await message.bot.edit_message_text(
+            chat_id=data["topup_chat_id"],
+            message_id=data["topup_message_id"],
+            text=invoice_text,
+            reply_markup=invoice_kb
+        )
+    except Exception:
+        await message.answer(text=invoice_text, reply_markup=invoice_kb)
 
 @router.callback_query(F.data.startswith("check_inv_"))
 async def check_invoice_status(callback: CallbackQuery, i18n, db_user, bot: Bot):
@@ -71,7 +87,10 @@ async def check_invoice_status(callback: CallbackQuery, i18n, db_user, bot: Bot)
         
     if invoice.status == 'paid':
         amount = float(invoice.amount)
-        await add_user_balance(db_user.telegram_id, amount)
+        credit_result = await credit_cryptobot_invoice(db_user.telegram_id, invoice_id, amount)
+        if not credit_result["credited"]:
+            return await callback.answer(i18n.topup_invoice_already_credited(), show_alert=True)
+
         logger.info(f"ПОПОЛНЕНИЕ: Юзер {db_user.telegram_id} через CryptoBot на {amount} $")
         
         admins_to_notify = await get_admins_for_notifications(config.admins)
@@ -79,18 +98,22 @@ async def check_invoice_status(callback: CallbackQuery, i18n, db_user, bot: Bot)
             try: await bot.send_message(adm_id, f"💰 <b>CryptoBot!</b>\nЮзер: <code>{db_user.telegram_id}</code>\nСумма: <b>{amount} $</b>")
             except Exception: pass
             
-        await callback.message.edit_text(i18n.topup_success(amount=amount))
+        await _notify_referrer_bonus(bot, credit_result["referral"])
+        await callback.message.edit_text(
+            i18n.topup_success(amount=amount),
+            reply_markup=get_main_menu_only_kb(i18n)
+        )
     elif invoice.status == 'active':
         await callback.answer(i18n.topup_pending(), show_alert=True)
     elif invoice.status == 'expired':
-        await callback.message.edit_text(i18n.topup_expired())
+        await callback.message.edit_text(i18n.topup_expired(), reply_markup=get_main_menu_only_kb(i18n))
     else:
-        await callback.message.edit_text(i18n.topup_error())
+        await callback.message.edit_text(i18n.topup_error(), reply_markup=get_main_menu_only_kb(i18n))
 
 # --- БЛОК BYBIT ---
 @router.callback_query(F.data == "topup_bybit")
 async def start_bybit_topup(callback: CallbackQuery, state: FSMContext, i18n):
-    await callback.message.edit_text(i18n.topup_bybit_info())
+    await callback.message.edit_text(i18n.topup_bybit_info(), reply_markup=get_cancel_topup_kb(i18n))
     await state.set_state(BybitTopupStates.waiting_for_uid)
 
 @router.message(BybitTopupStates.waiting_for_uid, F.text)
@@ -145,7 +168,7 @@ async def check_bybit_deposit(callback: CallbackQuery, bot: Bot, db_user, i18n):
                 
             found_any = True
             await register_bybit_tx(tx_id, db_user.telegram_id, amount)
-            await add_user_balance(db_user.telegram_id, amount)
+            credit_result = await add_user_balance(db_user.telegram_id, amount)
             logger.info(f"✅ ПОПОЛНЕНИЕ: Юзер {db_user.telegram_id} Bybit UID {user_uid} на {amount} $")
             
             admins_to_notify = await get_admins_for_notifications(config.admins)
@@ -153,7 +176,11 @@ async def check_bybit_deposit(callback: CallbackQuery, bot: Bot, db_user, i18n):
                 try: await bot.send_message(adm_id, f"🔶 <b>Bybit!</b>\nЮзер: <code>{db_user.telegram_id}</code>\nUID: <code>{user_uid}</code>\nСумма: <b>{amount} $</b>")
                 except Exception: pass
                 
-            await callback.message.edit_text(i18n.topup_bybit_success(user_uid=user_uid, amount=amount))
+            await _notify_referrer_bonus(bot, credit_result["referral"])
+            await callback.message.edit_text(
+                i18n.topup_bybit_success(user_uid=user_uid, amount=amount),
+                reply_markup=get_main_menu_only_kb(i18n)
+            )
             break
             
     if not found_any:
@@ -162,4 +189,22 @@ async def check_bybit_deposit(callback: CallbackQuery, bot: Bot, db_user, i18n):
 @router.callback_query(F.data == "cancel_topup")
 async def cancel_topup(callback: CallbackQuery, state: FSMContext, i18n):
     await state.clear()
-    await callback.message.edit_text(i18n.topup_cancelled())
+    await callback.message.edit_text(i18n.topup_cancelled(), reply_markup=get_main_menu_only_kb(i18n))
+
+async def _notify_referrer_bonus(bot: Bot, referral: dict | None):
+    if not referral:
+        return
+
+    referrer_i18n = translator_hub.get_translator_by_locale(referral["referrer_language"])
+    try:
+        await bot.send_message(
+            chat_id=referral["referrer_id"],
+            text=referrer_i18n.referral_bonus_received(
+                referred_id=str(referral["referred_id"]),
+                topup_amount=round(referral["topup_amount"], 2),
+                bonus_amount=round(referral["bonus_amount"], 2),
+                percent=round(referral["percent"], 2)
+            )
+        )
+    except Exception:
+        pass

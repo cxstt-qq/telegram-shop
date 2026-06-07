@@ -50,5 +50,6 @@ class L10nMiddleware(BaseMiddleware):
         # 3. Передаем объект перевода и объект юзера дальше в хэндлеры
         data["i18n"] = translator
         data["db_user"] = db_user 
+        data["is_new_user"] = getattr(db_user, "is_new_user", False)
         
         return await handler(event, data)

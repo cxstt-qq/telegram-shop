@@ -18,6 +18,11 @@ def get_main_menu_kb(i18n) -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
+def get_main_menu_only_kb(i18n) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=i18n.btn_main_menu(), callback_data="back_to_main"))
+    return builder.as_markup()
+
 def get_categories_kb(categories: list[Category], lang: str, i18n) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for category in categories:

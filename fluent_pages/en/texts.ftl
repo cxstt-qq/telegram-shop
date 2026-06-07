@@ -11,12 +11,22 @@ profile_info = 👤 <b>Your Profile:</b>
     ├ Balance: ${ $balance }
     ├ Registration Date: { $reg_date }
     └ Total Orders: { $orders_count }
+profile_referral_info = 🤝 <b>Referral program:</b>
+    ├ Link: <code>{ $referral_link }</code>
+    ├ Invited: <b>{ $referrals_count }</b>
+    ├ Earned: <b>${ $referral_earned }</b>
+    └ Current percent: <b>{ $referral_percent }%</b>
+referral_bonus_received = 🤝 <b>Referral reward!</b>
+    Your referral <code>{ $referred_id }</code> topped up <b>${ $topup_amount }</b>.
+    Your percent: <b>{ $percent }%</b>
+    Reward: <b>${ $bonus_amount }</b>
 
 shop_title = 🛒 <b>Product Catalog</b>
 shop_desc = Choose a category below:
 
 empty_category = 😔 No products available in this category yet.
 support_text = 💬 For support, please contact: @wesqqu
+action_cancelled = 🚫 Action cancelled.
 
 btn_buy = 💳 Buy (${ $price })
 btn_back = 🔙 Back
@@ -49,6 +59,7 @@ topup_invoice_created = 🧾 <b>Invoice #{ $invoice_id }</b>
 
     Amount: <b>{ $amount } USDT</b>
 topup_invoice_not_found = ❌ Invoice not found.
+topup_invoice_already_credited = ✅ This invoice has already been credited to your balance.
 topup_success = ✅ <b>Payment successfully received!</b>
     Credited to your balance: <b>${ $amount }</b>
     

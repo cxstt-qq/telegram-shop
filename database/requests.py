@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta
 from sqlalchemy import select, delete, update, func
+from sqlalchemy.exc import IntegrityError
 from database.db import async_session_maker
-from database.models import User, Category, Product, Item, Order, AdminSettings, BybitTransaction
+from database.models import (
+    User, Category, Product, Item, Order, AdminSettings, BybitTransaction,
+    BotSettings, CryptoBotInvoice, ReferralTransaction
+)
 
 # --- РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ---
 
@@ -15,6 +19,9 @@ async def get_or_create_user(telegram_id: int, username: str | None, language: s
             session.add(user)
             await session.commit()
             await session.refresh(user)
+            user.is_new_user = True
+        else:
+            user.is_new_user = False
         return user
 
 async def get_user(telegram_id: int) -> User | None:
@@ -28,6 +35,53 @@ async def update_user_language(telegram_id: int, language: str):
             update(User).where(User.telegram_id == telegram_id).values(language=language, language_set=True)
         )
         await session.commit()
+
+async def bind_referrer(user_id: int, referrer_id: int) -> bool:
+    async with async_session_maker() as session:
+        if user_id == referrer_id:
+            return False
+
+        user = await session.get(User, user_id)
+        referrer = await session.get(User, referrer_id)
+
+        if not user or not referrer or user.referred_by is not None:
+            return False
+
+        user.referred_by = referrer_id
+        await session.commit()
+        return True
+
+async def get_referral_percent() -> float:
+    async with async_session_maker() as session:
+        settings = await session.get(BotSettings, 1)
+        if settings is None:
+            settings = BotSettings(id=1, referral_percent=0.0)
+            session.add(settings)
+            await session.commit()
+        return settings.referral_percent
+
+async def set_referral_percent(percent: float):
+    async with async_session_maker() as session:
+        settings = await session.get(BotSettings, 1)
+        if settings is None:
+            settings = BotSettings(id=1, referral_percent=percent)
+            session.add(settings)
+        else:
+            settings.referral_percent = percent
+        await session.commit()
+
+async def get_referral_stats(telegram_id: int) -> dict:
+    async with async_session_maker() as session:
+        referrals_count = await session.scalar(
+            select(func.count(User.telegram_id)).where(User.referred_by == telegram_id)
+        )
+        earned = await session.scalar(
+            select(User.referral_earned).where(User.telegram_id == telegram_id)
+        )
+        return {
+            "referrals_count": referrals_count or 0,
+            "referral_earned": earned or 0.0,
+        }
 
 # --- РАБОТА С КАТЕГОРИЯМИ И ТОВАРАМИ ---
 
@@ -212,14 +266,75 @@ async def get_all_users() -> list[User]:
         result = await session.execute(select(User))
         return result.scalars().all()
 
-async def add_user_balance(telegram_id: int, amount: float):
+async def add_user_balance(telegram_id: int, amount: float, apply_referral: bool = True):
     """Начисляет баланс пользователю после успешной оплаты"""
     async with async_session_maker() as session:
         user = await session.execute(select(User).where(User.telegram_id == telegram_id))
         user = user.scalar_one_or_none()
-        if user:
-            user.balance += amount
+        if not user:
+            return {"credited": False, "referral": None}
+
+        user.balance += amount
+        referral = None
+
+        if apply_referral and amount > 0 and user.referred_by:
+            referral = await _apply_referral_bonus(session, user, amount)
+
+        await session.commit()
+        return {"credited": True, "referral": referral}
+
+async def credit_cryptobot_invoice(telegram_id: int, invoice_id: int, amount: float) -> dict:
+    async with async_session_maker() as session:
+        processed_invoice = await session.get(CryptoBotInvoice, invoice_id)
+        if processed_invoice:
+            return {"credited": False, "referral": None}
+
+        user = await session.get(User, telegram_id)
+        if not user:
+            return {"credited": False, "referral": None}
+
+        user.balance += amount
+        referral = await _apply_referral_bonus(session, user, amount)
+        session.add(CryptoBotInvoice(invoice_id=invoice_id, telegram_id=telegram_id, amount=amount))
+        try:
             await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            return {"credited": False, "referral": None}
+        return {"credited": True, "referral": referral}
+
+async def _apply_referral_bonus(session, user: User, amount: float):
+    if amount <= 0 or not user.referred_by:
+        return None
+
+    settings = await session.get(BotSettings, 1)
+    referral_percent = settings.referral_percent if settings else 0.0
+    bonus_amount = round(amount * referral_percent / 100, 2)
+
+    if bonus_amount <= 0:
+        return None
+
+    referrer = await session.get(User, user.referred_by)
+    if not referrer:
+        return None
+
+    referrer.balance += bonus_amount
+    referrer.referral_earned = (referrer.referral_earned or 0.0) + bonus_amount
+    session.add(ReferralTransaction(
+        referrer_id=referrer.telegram_id,
+        referred_id=user.telegram_id,
+        topup_amount=amount,
+        bonus_amount=bonus_amount,
+        percent=referral_percent
+    ))
+    return {
+        "referrer_id": referrer.telegram_id,
+        "referrer_language": referrer.language,
+        "referred_id": user.telegram_id,
+        "topup_amount": amount,
+        "bonus_amount": bonus_amount,
+        "percent": referral_percent,
+    }
 
 async def get_admin_notifications_status(telegram_id: int) -> bool:
     """Получает статус уведомлений админа. По умолчанию - включены."""

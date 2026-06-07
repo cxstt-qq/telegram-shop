@@ -31,3 +31,6 @@ class PrivateMsgStates(StatesGroup):
     """Состояния для отправки ЛС пользователю"""
     waiting_for_user_id = State()
     waiting_for_message = State()
+
+class ReferralSettingsStates(StatesGroup):
+    waiting_for_percent = State()

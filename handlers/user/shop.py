@@ -169,9 +169,9 @@ async def process_buy_confirm(callback: CallbackQuery, i18n, db_user, bot: Bot):
     logger = logging.getLogger(__name__) # Инициализируем логгер
     
     if result['status'] == 'no_stock':
-        await callback.message.edit_text(i18n.buy_out_of_stock())
+        await callback.message.edit_text(i18n.buy_out_of_stock(), reply_markup=get_main_menu_kb(i18n))
     elif result['status'] == 'no_balance':
-        await callback.message.edit_text(i18n.buy_no_balance())
+        await callback.message.edit_text(i18n.buy_no_balance(), reply_markup=get_main_menu_kb(i18n))
     elif result['status'] == 'success':
         # 1. Выводим в лог-файл
         logger.info(f"ПОКУПКА: Юзер {db_user.telegram_id} купил лот #{product_id} (Кол-во: {quantity})")
@@ -188,9 +188,9 @@ async def process_buy_confirm(callback: CallbackQuery, i18n, db_user, bot: Bot):
                 pass # Если админ заблочил бота, игнорируем
                 
         # 3. Выдаем товар пользователю
-        await callback.message.edit_text(text=i18n.buy_success(item_data=result['item_data']))
+        await callback.message.edit_text(text=i18n.buy_success(item_data=result['item_data']), reply_markup=get_main_menu_kb(i18n))
     else:
-        await callback.message.edit_text(i18n.error_buy_failed())
+        await callback.message.edit_text(i18n.error_buy_failed(), reply_markup=get_main_menu_kb(i18n))
 
 @router.callback_query(F.data == "cancel_buy")
 async def process_buy_cancel(callback: CallbackQuery, state: FSMContext, i18n):

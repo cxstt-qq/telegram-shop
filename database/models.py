@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import BigInteger, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import BigInteger, String, Float, Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.db import Base
 
@@ -9,6 +9,8 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     username: Mapped[str | None] = mapped_column(String(32), nullable=True)
     balance: Mapped[float] = mapped_column(Float, default=0.0)
+    referred_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey('users.telegram_id', ondelete='SET NULL'), nullable=True)
+    referral_earned: Mapped[float] = mapped_column(Float, default=0.0)
     language: Mapped[str] = mapped_column(String(2), default='ru')
     language_set: Mapped[bool] = mapped_column(Boolean, default=False)
     registration_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -74,6 +76,31 @@ class AdminSettings(Base):
     
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     notifications: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class BotSettings(Base):
+    __tablename__ = 'bot_settings'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    referral_percent: Mapped[float] = mapped_column(Float, default=0.0)
+
+class ReferralTransaction(Base):
+    __tablename__ = 'referral_transactions'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    referrer_id: Mapped[int] = mapped_column(BigInteger)
+    referred_id: Mapped[int] = mapped_column(BigInteger)
+    topup_amount: Mapped[float] = mapped_column(Float)
+    bonus_amount: Mapped[float] = mapped_column(Float)
+    percent: Mapped[float] = mapped_column(Float)
+    created_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class CryptoBotInvoice(Base):
+    __tablename__ = 'cryptobot_invoices'
+
+    invoice_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    telegram_id: Mapped[int] = mapped_column(BigInteger)
+    amount: Mapped[float] = mapped_column(Float)
+    checked_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class BybitTransaction(Base):
     __tablename__ = 'bybit_transactions'

@@ -1,15 +1,19 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 
 from keyboards.user_kb import get_language_kb, get_main_menu_kb
-from database.requests import update_user_language
+from database.requests import bind_referrer, update_user_language
 from middlewares.i18n import create_translator_hub
 
 router = Router()
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, i18n, db_user):
+async def cmd_start(message: Message, command: CommandObject, i18n, db_user, is_new_user: bool = False):
+    referrer_id = _parse_referrer_id(command.args)
+    if is_new_user and referrer_id is not None:
+        await bind_referrer(db_user.telegram_id, referrer_id)
+
     if not db_user.language_set:
         await message.answer(
             text=i18n.start_welcome(),
@@ -25,6 +29,16 @@ async def cmd_start(message: Message, i18n, db_user):
             text=welcome_text,
             reply_markup=get_main_menu_kb(i18n)
         )
+
+def _parse_referrer_id(payload: str | None) -> int | None:
+    if not payload:
+        return None
+
+    raw_id = payload.removeprefix("ref_")
+    if not raw_id.isdigit():
+        return None
+
+    return int(raw_id)
 
 @router.message(F.text.in_(["🇷🇺 Русский", "🇬🇧 English"]))
 async def process_language_selection(message: Message, db_user):

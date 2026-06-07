@@ -8,7 +8,8 @@ def get_admin_main_kb() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="📥 Залить аккаунты"), KeyboardButton(text="💰 Выдать баланс")],
         [KeyboardButton(text="📊 Магазин"), KeyboardButton(text="🔍 Юзер")],
         [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="✉️ ЛС юзеру")],
-        [KeyboardButton(text="⚙️ Настройки уведомлений")] # Новая кнопка
+        [KeyboardButton(text="⚙️ Настройки уведомлений")],
+        [KeyboardButton(text="🤝 Реферальный процент")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 

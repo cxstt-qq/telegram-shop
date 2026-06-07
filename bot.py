@@ -15,7 +15,7 @@ from middlewares.i18n import L10nMiddleware, create_translator_hub
 from handlers import common
 
 # Импорт админских хэндлеров (stats добавлен сюда)
-from handlers.admin import admin_main, categories, products, users_man, stats, mailing, notifications
+from handlers.admin import admin_main, categories, products, users_man, stats, mailing, notifications, referrals
 
 # Импорт пользовательских хэндлеров
 from handlers.user import user_main, profile, shop, payments
@@ -64,6 +64,7 @@ async def main():
     dp.include_router(stats.router)
     dp.include_router(mailing.router)
     dp.include_router(notifications.router)
+    dp.include_router(referrals.router)
     
     # 3. В конце пользовательская часть
     dp.include_router(user_main.router)

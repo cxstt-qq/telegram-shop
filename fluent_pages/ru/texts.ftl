@@ -11,12 +11,22 @@ profile_info = 👤 <b>Твой профиль:</b>
     ├ Баланс: { $balance } $
     ├ Дата регистрации: { $reg_date }
     └ Всего покупок: { $orders_count }
+profile_referral_info = 🤝 <b>Реферальная программа:</b>
+    ├ Ссылка: <code>{ $referral_link }</code>
+    ├ Приглашено: <b>{ $referrals_count }</b>
+    ├ Заработано: <b>{ $referral_earned } $</b>
+    └ Текущий процент: <b>{ $referral_percent }%</b>
+referral_bonus_received = 🤝 <b>Реферальное начисление!</b>
+    Ваш реферал <code>{ $referred_id }</code> пополнил баланс на <b>{ $topup_amount } $</b>.
+    Ваш процент: <b>{ $percent }%</b>
+    Начислено: <b>{ $bonus_amount } $</b>
 
 shop_title = 🛒 <b>Каталог товаров</b>
 shop_desc = Выбери нужную категорию ниже:
 
 empty_category = 😔 В этой категории пока нет товаров.
 support_text = 💬 Для связи с поддержкой пиши: @wesqqu
+action_cancelled = 🚫 Действие отменено.
 
 btn_buy = 💳 Купить ({ $price } $)
 btn_back = 🔙 Назад
@@ -49,6 +59,7 @@ topup_invoice_created = 🧾 <b>Счет #{ $invoice_id }</b>
 
     Сумма: <b>{ $amount } USDT</b>
 topup_invoice_not_found = ❌ Счет не найден.
+topup_invoice_already_credited = ✅ Этот счет уже был зачислен на баланс.
 topup_success = ✅ <b>Оплата успешно получена!</b>
     На ваш баланс зачислено: <b>{ $amount } $</b>
     
