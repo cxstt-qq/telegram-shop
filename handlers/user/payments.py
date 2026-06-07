@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiocryptopay import AioCryptoPay, Networks
 from pybit.unified_trading import HTTP
+import time  # Не забудь добавить импорт в начало файла
 
 from config_data.config import config
 from states.user_states import TopupStates, BybitTopupStates
@@ -112,7 +113,7 @@ async def check_bybit_deposit(callback: CallbackQuery, bot: Bot, db_user, i18n):
     user_uid = callback.data.split("_")[2]
     
     try:
-        response = bybit_session.get_internal_deposit_records(coin="USDT", limit=10)
+        response = bybit_session.get_internal_deposit_records(coin="USDT", limit=20)
         records = response.get("result", {}).get("rows", [])
     except Exception as e:
         logger.error(f"Bybit API Error: {e}")
@@ -121,23 +122,35 @@ async def check_bybit_deposit(callback: CallbackQuery, bot: Bot, db_user, i18n):
     if not records:
         return await callback.answer(i18n.topup_bybit_not_found(), show_alert=True)
         
+    # Вычисляем отсечку
+    six_hours_ago_sec = int(time.time() - 6 * 3600)
+    logger.info(f"🕒 Отсечка 6 часов назад: {six_hours_ago_sec}")
+    
     found_any = False
     for record in records:
-        if str(record.get("fromMemberId")) == user_uid and record.get("status") == 2:
+        tx_time = int(record.get("createdTime", 0))
+        status = int(record.get("status", 0)) # Принудительно в int, вдруг там строка "2"
+        from_uid = str(record.get("fromMemberId"))
+        
+        # Выводим инфу по каждой транзе в консоль!
+        logger.info(f"🔎 Чек транзы: API_UID={from_uid} (Ждем={user_uid}) | Статус={status} | Время={tx_time} > {six_hours_ago_sec}: {tx_time > six_hours_ago_sec}")
+        
+        if from_uid == user_uid and status == 2 and tx_time > six_hours_ago_sec:
             tx_id = record.get("txID")
             amount = float(record.get("amount"))
             
             if await is_bybit_tx_processed(tx_id):
+                logger.info(f"⚠️ Транзакция {tx_id} уже обрабатывалась.")
                 continue  
                 
             found_any = True
             await register_bybit_tx(tx_id, db_user.telegram_id, amount)
             await add_user_balance(db_user.telegram_id, amount)
-            logger.info(f"ПОПОЛНЕНИЕ: Юзер {db_user.telegram_id} Bybit UID {user_uid} на {amount} $")
+            logger.info(f"✅ ПОПОЛНЕНИЕ: Юзер {db_user.telegram_id} Bybit UID {user_uid} на {amount} $")
             
             admins_to_notify = await get_admins_for_notifications(config.admins)
             for adm_id in admins_to_notify:
-                try: await bot.send_message(adm_id, f"🔶 <b>Bybit!</b>\nЮзер: <code>{db_user.telegram_id}</code>\nUID: <code>{user_uid}</code>\nСумма: <b>{amount} $</b>", parsemode="HTML")
+                try: await bot.send_message(adm_id, f"🔶 <b>Bybit!</b>\nЮзер: <code>{db_user.telegram_id}</code>\nUID: <code>{user_uid}</code>\nСумма: <b>{amount} $</b>")
                 except Exception: pass
                 
             await callback.message.edit_text(i18n.topup_bybit_success(user_uid=user_uid, amount=amount))
