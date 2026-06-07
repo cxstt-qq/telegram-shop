@@ -1,4 +1,5 @@
 from aiogram import Router, F
+from aiogram.types import BufferedInputFile
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
@@ -16,6 +17,7 @@ from aiogram import Bot
 from config_data.config import config
 
 router = Router()
+MAX_TEXT_DELIVERY_LENGTH = 3500
 
 # --- НАВИГАЦИЯ ПО МАГАЗИНУ ---
 
@@ -188,7 +190,7 @@ async def process_buy_confirm(callback: CallbackQuery, i18n, db_user, bot: Bot):
                 pass # Если админ заблочил бота, игнорируем
                 
         # 3. Выдаем товар пользователю
-        await callback.message.edit_text(text=i18n.buy_success(item_data=result['item_data']), reply_markup=get_main_menu_kb(i18n))
+        await _deliver_purchase(callback, i18n, result['item_data'])
     else:
         await callback.message.edit_text(i18n.error_buy_failed(), reply_markup=get_main_menu_kb(i18n))
 
@@ -199,4 +201,28 @@ async def process_buy_cancel(callback: CallbackQuery, state: FSMContext, i18n):
     await callback.message.edit_text(
         text=i18n.buy_cancelled(),
         reply_markup=get_main_menu_kb(i18n)
+    )
+
+async def _deliver_purchase(callback: CallbackQuery, i18n, item_data: str):
+    text = i18n.buy_success(item_data=item_data)
+
+    if len(text) <= MAX_TEXT_DELIVERY_LENGTH:
+        await callback.message.edit_text(
+            text=text,
+            reply_markup=get_main_menu_kb(i18n)
+        )
+        return
+
+    file = BufferedInputFile(
+        item_data.encode("utf-8"),
+        filename=f"purchase_{callback.from_user.id}.txt"
+    )
+
+    await callback.message.edit_text(
+        text=i18n.buy_success_file(),
+        reply_markup=get_main_menu_kb(i18n)
+    )
+    await callback.message.answer_document(
+        document=file,
+        caption=i18n.buy_success_file_caption()
     )

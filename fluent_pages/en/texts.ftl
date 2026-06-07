@@ -37,6 +37,9 @@ buy_out_of_stock = ❌ Sorry, this item is out of stock.
 buy_success = 🎉 Successful purchase! 
     Here is your data:
     <code>{ $item_data }</code>
+buy_success_file = 🎉 Successful purchase!
+    The data is too large for one message, so I sent it as a file below.
+buy_success_file_caption = 📄 Your purchase data
 buy_enter_quantity = 🔢 Enter the quantity of items to buy (available: { $available } pcs.):
 buy_invalid_quantity = ❌ Please enter a whole number greater than zero (e.g., 1, 2, 5).
 buy_confirm = 🛒 <b>Purchase Confirmation:</b>

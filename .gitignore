@@ -3,3 +3,4 @@ venv/
 *.db
 pycache/
 bot.log
+run_bot.bat

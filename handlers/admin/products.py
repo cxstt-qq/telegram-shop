@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -145,7 +147,7 @@ async def process_product_id(message: Message, state: FSMContext):
         
     await state.update_data(product_id=int(message.text))
     await message.answer(
-        "Отлично! Теперь отправьте мне список аккаунтов.\n"
+        "Отлично! Теперь отправьте мне список аккаунтов текстом или .txt файлом.\n"
         "<b>Каждая новая строка = один отдельный товар.</b>\n"
         "<i>Пример:</i>\nlog1:pass1\nlog2:pass2"
     )
@@ -153,16 +155,47 @@ async def process_product_id(message: Message, state: FSMContext):
 
 @router.message(ItemStates.waiting_for_items_data, F.text)
 async def process_bulk_data(message: Message, state: FSMContext):
+    accounts_list = _parse_items_lines(message.text)
+    await _save_uploaded_items(message, state, accounts_list)
+
+@router.message(ItemStates.waiting_for_items_data, F.document)
+async def process_bulk_file(message: Message, state: FSMContext):
+    document = message.document
+
+    if document.file_size and document.file_size > 2 * 1024 * 1024:
+        return await message.answer("Файл слишком большой. Пришлите .txt до 2 МБ.")
+
+    try:
+        telegram_file = await message.bot.get_file(document.file_id)
+        buffer = BytesIO()
+        await message.bot.download_file(telegram_file.file_path, destination=buffer)
+        file_text = _decode_items_file(buffer.getvalue())
+    except UnicodeDecodeError:
+        return await message.answer("Не удалось прочитать файл. Пришлите текстовый файл в UTF-8 или Windows-1251.")
+    except Exception:
+        return await message.answer("Не удалось скачать файл. Попробуйте еще раз.")
+
+    accounts_list = _parse_items_lines(file_text)
+    await _save_uploaded_items(message, state, accounts_list)
+
+def _parse_items_lines(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+def _decode_items_file(raw_data: bytes) -> str:
+    try:
+        return raw_data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw_data.decode("cp1251")
+
+async def _save_uploaded_items(message: Message, state: FSMContext, accounts_list: list[str]):
     data = await state.get_data()
     product_id = data['product_id']
-    
-    accounts_list = [line.strip() for line in message.text.split('\n') if line.strip()]
-    
+
     if not accounts_list:
         return await message.answer("Вы прислали пустой список. Попробуйте снова.")
-        
+
     await add_items_bulk(product_id=product_id, data_list=accounts_list)
-    
+
     await state.clear()
     await message.answer(
         f"✅ Успешно загружено <b>{len(accounts_list)}</b> аккаунтов в лот #{product_id}!",
