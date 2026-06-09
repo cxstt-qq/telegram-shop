@@ -197,6 +197,17 @@ async def _save_uploaded_items(message: Message, state: FSMContext, accounts_lis
     await add_items_bulk(product_id=product_id, data_list=accounts_list)
 
     await state.clear()
+    if data.get("return_to_catalog_product_id"):
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(
+            text="↩️ Вернуться к лоту",
+            callback_data=f"cm_product:{data['return_to_catalog_product_id']}"
+        ))
+        return await message.answer(
+            f"✅ Успешно загружено <b>{len(accounts_list)}</b> товаров в лот #{product_id}!",
+            reply_markup=builder.as_markup()
+        )
+
     await message.answer(
         f"✅ Успешно загружено <b>{len(accounts_list)}</b> аккаунтов в лот #{product_id}!",
         reply_markup=get_admin_main_kb()

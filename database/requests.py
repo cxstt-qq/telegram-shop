@@ -90,6 +90,11 @@ async def get_categories():
         result = await session.execute(select(Category))
         return result.scalars().all()
 
+async def get_category_by_id(category_id: int) -> Category | None:
+    async with async_session_maker() as session:
+        result = await session.execute(select(Category).where(Category.id == category_id))
+        return result.scalar_one_or_none()
+
 async def add_category(name_ru: str, name_en: str):
     async with async_session_maker() as session:
         category = Category(name_ru=name_ru, name_en=name_en)
@@ -100,6 +105,20 @@ async def delete_category(category_id: int):
     async with async_session_maker() as session:
         await session.execute(delete(Category).where(Category.id == category_id))
         await session.commit()
+
+async def update_category_field(category_id: int, field: str, value: str) -> bool:
+    allowed_fields = {"name_ru", "name_en"}
+    if field not in allowed_fields:
+        return False
+
+    async with async_session_maker() as session:
+        category = await session.get(Category, category_id)
+        if not category:
+            return False
+
+        setattr(category, field, value)
+        await session.commit()
+        return True
 
 async def get_products(category_id: int):
     async with async_session_maker() as session:
@@ -121,6 +140,17 @@ async def get_all_products():
     async with async_session_maker() as session:
         result = await session.execute(select(Product))
         return result.scalars().all()
+
+async def get_all_products_with_counts():
+    async with async_session_maker() as session:
+        stmt = (
+            select(Product, func.count(Item.id))
+            .outerjoin(Item, (Item.product_id == Product.id) & (Item.is_sold == False))
+            .group_by(Product.id)
+            .order_by(Product.id)
+        )
+        result = await session.execute(stmt)
+        return result.all()
 
 async def get_product_by_id(product_id: int) -> Product | None:
     async with async_session_maker() as session:
@@ -152,11 +182,56 @@ async def delete_product(product_id: int):
         await session.execute(delete(Product).where(Product.id == product_id))
         await session.commit()
 
+async def update_product_field(product_id: int, field: str, value) -> bool:
+    allowed_fields = {"category_id", "title_ru", "title_en", "description_ru", "description_en", "price"}
+    if field not in allowed_fields:
+        return False
+
+    async with async_session_maker() as session:
+        product = await session.get(Product, product_id)
+        if not product:
+            return False
+
+        setattr(product, field, value)
+        await session.commit()
+        return True
+
 async def add_items_bulk(product_id: int, data_list: list[str]):
     async with async_session_maker() as session:
         items = [Item(product_id=product_id, data=data) for data in data_list if data.strip()]
         session.add_all(items)
         await session.commit()
+
+async def extract_items_from_product(product_id: int, quantity: int) -> dict:
+    async with async_session_maker() as session:
+        product = await session.get(Product, product_id)
+        if not product:
+            return {"status": "not_found", "items": []}
+
+        items_result = await session.execute(
+            select(Item)
+            .where(Item.product_id == product_id, Item.is_sold == False)
+            .order_by(Item.id)
+            .limit(quantity)
+        )
+        items = items_result.scalars().all()
+
+        if not items:
+            return {"status": "empty", "items": []}
+
+        if len(items) < quantity:
+            return {"status": "not_enough", "items": [], "available": len(items)}
+
+        extracted = [item.data for item in items]
+        for item in items:
+            await session.delete(item)
+
+        await session.commit()
+        return {
+            "status": "success",
+            "items": extracted,
+            "product_title": product.title_ru,
+        }
 
 # --- ТРАНЗАКЦИИ И СТАТИСТИКА ---
 

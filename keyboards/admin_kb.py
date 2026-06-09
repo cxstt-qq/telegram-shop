@@ -3,9 +3,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 def get_admin_main_kb() -> ReplyKeyboardMarkup:
     kb = [
-        [KeyboardButton(text="📁 Создать категорию"), KeyboardButton(text="🗑 Удалить категорию")],
-        [KeyboardButton(text="📦 Создать лот"), KeyboardButton(text="🗑 Удалить лот")],
-        [KeyboardButton(text="📥 Залить аккаунты"), KeyboardButton(text="💰 Выдать баланс")],
+        [KeyboardButton(text="🧰 Лоты и категории")],
+        [KeyboardButton(text="💰 Выдать баланс")],
         [KeyboardButton(text="📊 Магазин"), KeyboardButton(text="🔍 Юзер")],
         [KeyboardButton(text="📢 Рассылка"), KeyboardButton(text="✉️ ЛС юзеру")],
         [KeyboardButton(text="⚙️ Настройки уведомлений")],

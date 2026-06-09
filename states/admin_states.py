@@ -34,3 +34,15 @@ class PrivateMsgStates(StatesGroup):
 
 class ReferralSettingsStates(StatesGroup):
     waiting_for_percent = State()
+
+class CatalogManageStates(StatesGroup):
+    waiting_for_product_value = State()
+    waiting_for_category_value = State()
+    waiting_for_extract_quantity = State()
+    waiting_for_new_category_name_ru = State()
+    waiting_for_new_category_name_en = State()
+    waiting_for_new_product_title_ru = State()
+    waiting_for_new_product_title_en = State()
+    waiting_for_new_product_desc_ru = State()
+    waiting_for_new_product_desc_en = State()
+    waiting_for_new_product_price = State()
